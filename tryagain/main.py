@@ -7,8 +7,9 @@ from matplotlib.widgets import Slider
 
 
 class dataManager:
-    def __init__(self, beats):
+    def __init__(self, beats, raw_data):
         self.beats = beats
+        self.raw_data = raw_data
         self.fs = 250
         self.saecg_window_size = int(0.2 * self.fs)  # Watch for rounding error here, need to convert to int
         self.p_max_locs = np.array([[0] * len(beats)])[0]  # Pre-allocate size beats[i] -> P_max_locs[i]
@@ -101,16 +102,17 @@ class dataManager:
 
 
 class UIManager:
-    def __init__(self, index, beats, p_max_locs, wd, m, raw_data, saecg_p, saecg_xcorr_vals, fs):
+    # ui = UIManager(0, dm.get_beats(), dm.get_p_max_locs(), wd, m, raw_data, dm.get_saecg_p(), dm.saecg_xcorr_vals, dm.fs)
+    def __init__(self, index, dm, wd, m):
         self.current_index = index
-        self.beats = beats
+        self.beats = dm.get_beats()
         self.wd = wd
         self.m = m
-        self.raw_data = raw_data
-        self.p_max_locs = p_max_locs
-        self.saecg_p = saecg_p
-        self.fs = fs
-        self.saecg_xcorr_vals = saecg_xcorr_vals
+        self.raw_data = dm.raw_data
+        self.p_max_locs = dm.p_max_locs
+        self.saecg_p = dm.saecg_p
+        self.fs = dm.fs
+        self.saecg_xcorr_vals = dm.saecg_xcorr_vals
 
         self.fig, self.ax = plt.subplots(nrows=5, ncols=1, gridspec_kw={'height_ratios':[1, 1, 0.1, 0.1, 1]})
         self.fig.tight_layout()  # Configure the layout of UI elements
@@ -264,8 +266,9 @@ def startup():
 
 # START HERE
 beats, wd, m, raw_data = startup()
-dm = dataManager(beats)
+dm = dataManager(beats, raw_data)
 print("The length of beats is: ", len(dm.get_beats()))
-ui = UIManager(0, dm.get_beats(), dm.get_p_max_locs(), wd, m, raw_data, dm.get_saecg_p(), dm.saecg_xcorr_vals, dm.fs)
+# ui = UIManager(0, dm.get_beats(), dm.get_p_max_locs(), wd, m, raw_data, dm.get_saecg_p(), dm.saecg_xcorr_vals, dm.fs)
+ui = UIManager(0, dm, wd, m)
 
 plt.show()
