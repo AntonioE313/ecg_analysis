@@ -115,13 +115,18 @@ class UIManager:
         self.fig, self.ax = plt.subplots(nrows=5, ncols=1, gridspec_kw={'height_ratios':[1, 1, 0.1, 0.1, 1]})
         self.fig.tight_layout()  # Configure the layout of UI elements
 
+        self.axprev = plt.axes([0.7, 0.01, 0.08, 0.03])
+        self.axnext = plt.axes([0.81, 0.01, 0.08, 0.03])
+        self.axanalyze = plt.axes([0.05, 0.01, 0.08, 0.03])
 
-        self.axprev = plt.axes([0.7, 0.02, 0.08, 0.05])
-        self.axnext = plt.axes([0.81, 0.02, 0.08, 0.05])
         self.bnext = Button(self.axnext, 'Next')
         self.bnext.on_clicked(lambda x: self.next_button_pushed(x))
+
         self.bprev = Button(self.axprev, 'Previous')
         self.bprev.on_clicked(lambda x: self.prev_button_pushed(x))
+
+        self.banalyze = Button(self.axanalyze, 'Analyze')
+        self.banalyze.on_clicked(lambda x: self.analyze_button_pushed(x))
 
         plt.axes(self.ax[0])
         self.ax[0].set_title('Raw Data')
@@ -197,6 +202,9 @@ class UIManager:
                      self.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
                      marker='x')
             plt.show()
+
+    def analyze_button_pushed(self, event):
+        print('temp ... ', self.fs)
 
     def slider_updated(self, event):
         plt.axes(self.ax[1])
