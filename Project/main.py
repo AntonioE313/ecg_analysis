@@ -18,7 +18,6 @@ class dataManager:
         self.saecg_p = np.array(np.ones(shape=self.saecg_window_size))
         self.find_p_peaks()
         self.compute_saecg()
-        self.compute_saecg_xcorr()
 
     def find_p_peaks(self):
         # Prepare P windows array
@@ -91,11 +90,13 @@ class dataManager:
             self.saecg_xcorr_max_vals[i] = np.amax(temp)
 
             if i < 4:
+                print('temp = ', temp)
                 plt.figure()
-                print()
+                print(i)
                 plt.plot(np.true_divide(range(len(temp)), self.fs), temp)
-        self.saecg_xcorr_vals = np.true_divide(self.saecg_xcorr_max_vals, len(self.saecg_p))
-        print('self.saecg_xcorr_vals : ', self.saecg_xcorr_max_vals)
+        self.saecg_xcorr_max_vals = np.true_divide(self.saecg_xcorr_max_vals, len(self.saecg_p))
+        print('self.saecg_xcorr_max_vals : ', self.saecg_xcorr_max_vals)
+        return self
 
     def get_saecg_p(self):
         return self.saecg_p
@@ -105,14 +106,13 @@ class UIManager:
     # ui = UIManager(0, dm.get_beats(), dm.get_p_max_locs(), wd, m, raw_data, dm.get_saecg_p(), dm.saecg_xcorr_vals, dm.fs)
     def __init__(self, index, dm, wd, m):
         self.current_index = index
-        self.beats = dm.get_beats()
+        self.dm = dm
         self.wd = wd
         self.m = m
         self.raw_data = dm.raw_data
         self.p_max_locs = dm.p_max_locs
         self.saecg_p = dm.saecg_p
         self.fs = dm.fs
-        self.saecg_xcorr_vals = dm.saecg_xcorr_vals
 
         self.fig, self.ax = plt.subplots(nrows=5, ncols=1, gridspec_kw={'height_ratios':[1, 1, 0.1, 0.1, 1]})
         self.fig.tight_layout()  # Configure the layout of UI elements
@@ -134,7 +134,6 @@ class UIManager:
         self.ax[0].set_title('Raw Data')
         plt.plot(np.true_divide(range(len(raw_data)), self.fs), raw_data)
         plt.scatter(np.true_divide(wd['peaklist'], self.fs), raw_data[wd['peaklist']], c='g')
-        plt.plot(np.true_divide(wd['peaklist'][1:-1], self.fs), 6 * self.saecg_xcorr_vals, marker='_')
 
         plt.axes(self.ax[1])
         title_string = 'Signal Averaged P Wave'
@@ -159,12 +158,16 @@ class UIManager:
 
         plt.axes(self.ax[4])
         self.ax[4].clear()
-        title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(self.get_beats()))
+        title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(dm.get_beats()))
         self.ax[4].set_title(title_string)
-        plt.plot(np.true_divide(range(len(self.get_beats()[self.get_current_index()])), self.fs),
-                 self.get_beats()[self.get_current_index()])
+
+        # Create the array which is the 3 beats index-1 through index + 1
+        display_data = np.append(np.append(self.dm.get_beats()[self.current_index-1], self.dm.get_beats()[self.current_index]),
+                                 self.dm.get_beats()[self.current_index+1])
+        plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
+
         plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                 self.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
+                 self.dm.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
                  marker='x')
 
         mng = plt.get_current_fig_manager()
@@ -173,21 +176,25 @@ class UIManager:
 
     def next_button_pushed(self, event):
         print('data type of index : ', type(self.get_current_index()))
-        if self.get_current_index() < len(self.get_beats()) - 1:
+        if self.get_current_index() < len(self.dm.get_beats()) - 1:
             plt.axes(self.ax[4])
             self.set_current_index(self.get_current_index() + 1)
             self.ax[4].clear()
-            title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(self.get_beats()))
+            title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(self.dm.get_beats()))
             self.ax[4].set_title(title_string)
-            plt.plot(np.true_divide(range(len(self.get_beats()[self.get_current_index()])), self.fs),
-                     self.get_beats()[self.get_current_index()])
+
+            # Create the array which is the 3 beats index-1 through index + 1
+            display_data = np.append(
+                np.append(self.dm.get_beats()[self.current_index - 1], self.dm.get_beats()[self.current_index]),
+                self.dm.get_beats()[self.current_index + 1])
+            plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
 
             print('Type of self.p_max_locs[self.get_current_index()]: ',
                   type(self.p_max_locs[self.get_current_index()]))
             print('Type of self.get_current_index() : ', type(self.get_current_index()))
             print('data type of index : ', type(self.get_current_index()))
             plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                     self.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
+                     self.dm.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
                      marker='x')
             plt.show()
 
@@ -196,17 +203,25 @@ class UIManager:
             plt.axes(self.ax[4])
             self.set_current_index(self.get_current_index() - 1)
             self.ax[4].clear()
-            title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(self.get_beats()))
+            title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(dm.get_beats()))
             self.ax[4].set_title(title_string)
-            plt.plot(np.true_divide(range(len(self.get_beats()[self.get_current_index()])), self.fs),
-                     self.get_beats()[self.get_current_index()])
+
+            # Create the array which is the 3 beats index-1 through index + 1
+            display_data = np.append(
+                np.append(self.dm.get_beats()[self.current_index - 1], self.dm.get_beats()[self.current_index]),
+                self.dm.get_beats()[self.current_index + 1])
+            plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
+
             plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                     self.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
+                     self.dm.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
                      marker='x')
             plt.show()
 
     def analyze_button_pushed(self, event):
-        print('temp ... ', self.fs)
+        temp = self.saecg_p[int(self.slider_start.val * self.fs):int(self.slider_end.val * self.fs)]
+        dm.saecg_p = temp
+
+        self.dm = self.dm.compute_saecg_xcorr()
 
     def slider_updated(self, event):
         plt.axes(self.ax[1])
@@ -225,19 +240,13 @@ class UIManager:
     def set_current_index(self, index):
         self.current_index = index
 
-    def set_beats(self, beats):
-        self.beats = beats
-
-    def get_beats(self):
-        return self.beats
-
 
 def startup():
     signal_duration = 240  # signal duration in seconds
 
     sample_rate = 250
 
-    data = np.loadtxt(open('e0103.csv', "rb"), skiprows=1)
+    data = np.loadtxt(open('Data/e0103.csv', "rb"), skiprows=1)
     data = data[0:signal_duration * sample_rate, 1]
 
     # run analysis
@@ -269,6 +278,6 @@ beats, wd, m, raw_data = startup()
 dm = dataManager(beats, raw_data)
 print("The length of beats is: ", len(dm.get_beats()))
 # ui = UIManager(0, dm.get_beats(), dm.get_p_max_locs(), wd, m, raw_data, dm.get_saecg_p(), dm.saecg_xcorr_vals, dm.fs)
-ui = UIManager(0, dm, wd, m)
+ui = UIManager(1, dm, wd, m)
 
 plt.show()
