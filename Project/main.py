@@ -57,29 +57,12 @@ class dataManager:
 
     def compute_saecg(self):
         for i in range(len(self.p_max_locs)):
-            #        print('i value : ', i)
-            #        print(
-            # 'self.get_beats()[i][int(self.p_max_locs[i] - 0.5*self.saecg_window_size):
-            # int(self.p_max_locs[i] + 0.5*self.saecg_window_size)].shape : ',
-            #            self.get_beats()[i][int(self.p_max_locs[i] - 0.5 * self.saecg_window_size):int(
-            #                self.p_max_locs[i] + 0.5 * self.saecg_window_size)].shape)
-            #        print('self.saecg_window_size : ', self.saecg_window_size)
-            #        print('int(self.p_max_locs[i] - 0.5*self.saecg_window_size) : ',
-            #              int(self.p_max_locs[i] - 0.5 * self.saecg_window_size))
-            #        print('int(self.p_max_locs[i] + 0.5*self.saecg_window_size) : ',
-            #              int(self.p_max_locs[i] + 0.5 * self.saecg_window_size))
-            #        print('len(self.get_beats()[i]) : ', len(self.get_beats()[i]))
-
             self.saecg_p_windows[i] = self.get_beats()[i][int(self.p_max_locs[i] - 0.5 * self.saecg_window_size):
                                                           int(self.p_max_locs[i] + 0.5 * self.saecg_window_size)]
 
-        #    print('self.saecg_p_windows[i].dtype : ', self.saecg_p_windows[i].dtype)
-
-        #    print('self.saecg_p_windows : ', self.saecg_p_windows)
-        #    print('type(self.saecg_p_windows) : ', type(self.saecg_p_windows))
-        #    print('self.saecg_p_windows.shape : ', self.saecg_p_windows.shape)
         self.saecg_p = np.sum(self.saecg_p_windows, axis=0)
         self.saecg_p = np.true_divide(self.saecg_p, len(self.get_beats()))
+        return self
 
     def compute_saecg_xcorr(self):
         for i in range(len(self.beats)):
@@ -91,9 +74,12 @@ class dataManager:
 
             if i < 4:
                 print('temp = ', temp)
-                plt.figure()
+                plt.figure(i*100 + i*10 + i)
                 print(i)
                 plt.plot(np.true_divide(range(len(temp)), self.fs), temp)
+                plt.show()
+    #For some reason saecg_xcorr_max_vals is not keeping value when leaving for loop. Scope issue with multiple copies?
+    #I didn't change anything and now it works?
         self.saecg_xcorr_max_vals = np.true_divide(self.saecg_xcorr_max_vals, len(self.saecg_p))
         print('self.saecg_xcorr_max_vals : ', self.saecg_xcorr_max_vals)
         return self
@@ -220,7 +206,7 @@ class UIManager:
     def analyze_button_pushed(self, event):
         temp = self.saecg_p[int(self.slider_start.val * self.fs):int(self.slider_end.val * self.fs)]
         dm.saecg_p = temp
-
+        self.dm = self.dm.compute_saecg()
         self.dm = self.dm.compute_saecg_xcorr()
 
     def slider_updated(self, event):
