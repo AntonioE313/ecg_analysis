@@ -202,7 +202,7 @@ class UIManager:
         plt.show()
 
     def refresh_beat_viewer(self):
-        if self.get_current_index() > 0:
+        if self.get_current_index() >= 0:
             plt.axes(self.ax[4])
             self.ax[4].clear()
             title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(dm.get_beats()))
