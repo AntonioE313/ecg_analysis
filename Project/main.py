@@ -87,15 +87,19 @@ class dataManager:
 
             p_window_max_loc = temp_p_window.tolist().index(np.amax(temp_p_window)) # loc of max in samples from window le
 
-            # Need to find re of xcorr p wave (possible le of data p wave)
-            xcorr_re = sp.signal.find_peaks(-temp_p_window[p_window_max_loc:], distance=len(temp_p_window[p_window_max_loc:]))[0]
 
-            print('xcorr_re', xcorr_re)
+            xcorr_le = sp.signal.find_peaks(-temp_p_window[p_window_max_loc:],
+                                            distance=len(temp_p_window[p_window_max_loc:]))[0]
+            # Need to find re of xcorr p wave (possible le of data p wave)
+            xcorr_re = 0
+
+            print('xcorr_le', xcorr_le)
 
             # Debug plots
             plt.figure()
             plt.plot(temp_p_window)
-            plt.plot(xcorr_re, temp_p_window[xcorr_re], 'x')
+            plt.plot(xcorr_le, temp_p_window[xcorr_le], 'x')
+            plt.plot(p_window_max_loc, temp_p_window[p_window_max_loc], 'o')
             plt.show()
 
             p_window_le = round(0.5*len(xcorr)) # loc of p window le in samples from start of beat
@@ -220,10 +224,6 @@ class UIManager:
                          self.dm.get_beats()[self.current_index][self.dm.saecg_xcorr_max_locs[self.get_current_index()]],
                          'o')
 
-                plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.get_beats()[self.get_current_index()][
-                             round(self.p_max_locs[self.get_current_index()])],
-                         marker='x')
             elif self.mode == 2:
                 # Create the array which is the 3 beats index-1 through index + 1
                 display_data = np.append(
@@ -251,38 +251,7 @@ class UIManager:
             self.ax[4].clear()
             title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(self.dm.get_beats()))
             self.ax[4].set_title(title_string)
-
-            if self.mode == 1:
-                plt.plot(np.true_divide(range(len(self.dm.get_beats()[self.current_index])), self.fs),
-                         self.dm.get_beats()[self.current_index])
-
-                plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
-                         marker='x')
-
-                plt.plot(self.dm.saecg_xcorr_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.get_beats()[self.current_index][self.dm.saecg_xcorr_max_locs[self.get_current_index()]],
-                         'o')
-
-                plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.get_beats()[self.get_current_index()][
-                             round(self.p_max_locs[self.get_current_index()])],
-                         marker='x')
-
-            elif self.mode == 2:
-                # Create the array which is the 3 beats index-1 through index + 1
-                display_data = np.append(
-                np.append(self.dm.get_beats()[self.current_index - 1], self.dm.get_beats()[self.current_index]),
-                self.dm.get_beats()[self.current_index + 1])
-                plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
-
-                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.saecg_xcorr_max_locs[self.get_current_index()]) / self.fs,
-                         display_data[(len(self.dm.get_beats()[self.current_index - 1]) + self.dm.saecg_xcorr_max_locs[self.get_current_index()])],
-                         'o')
-
-                plt.plot((len(self.dm.get_beats()[self.current_index-1]) + self.p_max_locs[self.current_index]) / self.fs,
-                         display_data[len(self.dm.get_beats()[self.current_index-1]) + self.p_max_locs[self.current_index]],
-                         marker='x')
+            self.refresh_beat_viewer()
 
 
             print('Type of self.p_max_locs[self.get_current_index()]: ',
@@ -298,40 +267,7 @@ class UIManager:
             self.ax[4].clear()
             title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(dm.get_beats()))
             self.ax[4].set_title(title_string)
-
-            if self.mode == 1:
-                plt.plot(np.true_divide(range(len(self.dm.get_beats()[self.current_index])), self.fs),
-                         self.dm.get_beats()[self.current_index])
-
-                plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
-                         marker='x')
-
-                plt.plot(self.dm.saecg_xcorr_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.get_beats()[self.current_index][self.dm.saecg_xcorr_max_locs[self.get_current_index()]],
-                         'o')
-
-                plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.get_beats()[self.get_current_index()][
-                             round(self.p_max_locs[self.get_current_index()])],
-                         marker='x')
-            elif self.mode == 2:
-                # Create the array which is the 3 beats index-1 through index + 1
-                display_data = np.append(
-                np.append(self.dm.get_beats()[self.current_index - 1], self.dm.get_beats()[self.current_index]),
-                self.dm.get_beats()[self.current_index + 1])
-                plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
-
-                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.saecg_xcorr_max_locs[self.get_current_index()]) / self.fs,
-                         display_data[(len(self.dm.get_beats()[self.current_index - 1]) + self.dm.saecg_xcorr_max_locs[self.get_current_index()])],
-                         'o')
-
-                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.p_max_locs[self.current_index]) / self.fs,
-                    display_data[len(self.dm.get_beats()[self.current_index - 1]) + self.p_max_locs[self.current_index]],
-                    marker='x')
-
-
-            plt.show()
+            self.refresh_beat_viewer()
 
     def analyze_button_pushed(self, event):
         self.dm = self.dm.find_p_peaks()
