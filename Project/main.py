@@ -88,8 +88,10 @@ class dataManager:
             p_window_max_loc = temp_p_window.tolist().index(np.amax(temp_p_window)) # loc of max in samples from window le
 
             # Need to find re of xcorr p wave (possible le of data p wave)
-            xcorr_re = sp.signal.find_peaks(-temp_p_window[p_window_max_loc:], distance=len(temp_p_window[p_window_max_loc:]))
+            xcorr_re = sp.signal.find_peaks(-temp_p_window[p_window_max_loc:], distance=len(temp_p_window[p_window_max_loc:]))[0]
+
             print('xcorr_re', xcorr_re)
+
             # Debug plots
             plt.figure()
             plt.plot(temp_p_window)
