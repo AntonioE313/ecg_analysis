@@ -15,7 +15,6 @@ class dataManager:
         self.p_window_center = 0.15  # P window centre as in seconds back from end of beat
         self.p_window_center_s = np.array([[0] * len(beats)])[0]  # loc of p window centre in samples from start of beat
         self.p_max_locs = np.array([[0] * len(beats)])[0]  # Pre-allocate size beats[i] -> P_max_locs[i]
-        self.saecg_xcorr_max_locs = np.array([[0] * len(beats)])[0]
         self.saecg_p_windows = np.tile(np.array(np.ones(shape=(self.saecg_window_size))), (len(self.beats), 1))
         self.saecg_p = np.array(np.ones(shape=self.saecg_window_size))
 
@@ -83,6 +82,7 @@ class dataManager:
             pc_change_saecg_local = 100 * np.true_divide(np.diff(saecg_local), saecg_local[1:])
             pc_change_beats_i = 100 * np.true_divide(np.diff(self.beats[i]), self.beats[i][1:])
 
+            # Define P window edges as ratio of full beat length
             xcorr_p_window_le = 0.5
             xcorr_p_window_re = 0.9
 
@@ -90,26 +90,26 @@ class dataManager:
             xcorr_p_window = xcorr[round(xcorr_p_window_le * len(xcorr)):round(xcorr_p_window_re * len(xcorr))]
 
             # Set xcorr_params
-            self.xcorr_params['max_loc'][i] = xcorr_p_window.tolist().index(
-                np.amax(xcorr_p_window))  # loc of max in samples from window le
+            self.xcorr_params['max_loc'][i] = xcorr_p_window.tolist().index(np.amax(xcorr_p_window))
 
-            self.xcorr_params['le'][i] = sp.signal.find_peaks(-xcorr_p_window[self.xcorr_params['max_loc'][i]:],
-                                                              distance=len(xcorr_p_window[self.xcorr_params['max_loc'][i]:]))[0]
+            self.xcorr_params['le'][i] = sp.signal.find_peaks(-xcorr_p_window[0:self.xcorr_params['max_loc'][i]],
+                                                              distance=self.fs)[0]
 
             self.xcorr_params['re'][i] = 0
 
-            self.xcorr_params['max'][i] = xcorr[self.saecg_xcorr_max_locs[i]]
+            self.xcorr_params['max'][i] = xcorr[self.xcorr_params['max_loc'][i]]
 
             print('DM - self.xcorr_params[max][i]=', self.xcorr_params['max'][i])
             print('DM - self.xcorr_params[le][i]', self.xcorr_params['le'][i])
             print('DM - self.xcorr_params[re][i]', self.xcorr_params['re'][i])
 
             # Debug plots
-            plt.figure()
-            plt.plot(xcorr_p_window)
-            plt.plot(self.xcorr_params['le'][i], xcorr_p_window[self.xcorr_params['le'][i]], 'x')
-            plt.plot(self.xcorr_params['max_loc'][i], xcorr_p_window[self.xcorr_params['max_loc'][i]], 'o')
-            plt.show()
+            # plt.figure()
+            # # plt.plot(xcorr_p_window)
+            # plt.plot(xcorr_p_window[0:self.xcorr_params['max_loc'][i]])
+            # plt.plot(self.xcorr_params['le'][i], xcorr_p_window[self.xcorr_params['le'][i]], 'x')
+            # plt.plot(self.xcorr_params['max_loc'][i], xcorr_p_window[self.xcorr_params['max_loc'][i]], 'o')
+            # plt.show()
 
             p_window_le = round(0.5 * len(xcorr))  # loc of p window le in samples from start of beat
             print('DM - p_window_le', p_window_le)
@@ -119,14 +119,14 @@ class dataManager:
             print('len(xcorr)', len(xcorr))
             print('len(self.beats[i])', len(self.beats[i]))
 
-            # Set the params to be in terms of beat rather than p window
-            self.saecg_xcorr_max_locs[i] = self.xcorr_params['max_loc'][i] + p_window_le
+            # Set the loc params to be in terms of beat rather than p window
+            self.xcorr_params['max_loc'][i] = self.xcorr_params['max_loc'][i] + p_window_le
             self.xcorr_params['le'][i] = self.xcorr_params['le'][i] + p_window_le
             self.xcorr_params['re'][i] = self.xcorr_params['le'][i] + p_window_le
 
             # print('temp.tolist().index(np.amax(temp)) = ', temp.tolist().index(np.amax(temp)))
 
-        print('DM - self.saecg_xcorr_max_locs : ', self.saecg_xcorr_max_locs)
+        print('DM - self.self.xcorr_params[max_loc][i] : ', self.xcorr_params['max_loc'][i])
         print('DM - self.xcorr_params[max][i] : ', self.xcorr_params['max_loc'][i])
         return self
 
@@ -206,8 +206,9 @@ class UIManager:
                  self.dm.get_beats()[self.get_current_index()][round(self.p_max_locs[self.get_current_index()])],
                  marker='x')
 
-        plt.plot(self.dm.saecg_xcorr_max_locs[self.get_current_index()] / self.fs,
-                 self.dm.get_beats()[self.current_index][self.dm.saecg_xcorr_max_locs[self.get_current_index()]], 'o')
+        plt.plot(self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs,
+                 self.dm.get_beats()[self.current_index][self.dm.xcorr_params['max_loc'][self.get_current_index()]],
+                 'o')
 
         mng = plt.get_current_fig_manager()
         mng.window.state("zoomed")
@@ -229,10 +230,10 @@ class UIManager:
                              round(self.p_max_locs[self.get_current_index()])],
                          marker='x')
 
-                plt.plot(self.dm.saecg_xcorr_max_locs[self.get_current_index()] / self.fs,
+                plt.plot(self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs,
                          self.dm.get_beats()[self.current_index][
-                             self.dm.saecg_xcorr_max_locs[self.get_current_index()]],
-                         'o')
+                             self.dm.xcorr_params['max_loc'][self.get_current_index()]],
+                         marker='o')
 
             elif self.mode == 2:
                 # Create the array which is the 3 beats index-1 through index + 1
@@ -241,11 +242,11 @@ class UIManager:
                     self.dm.get_beats()[self.current_index + 1])
                 plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
 
-                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.saecg_xcorr_max_locs[
+                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
                     self.get_current_index()]) / self.fs,
-                         display_data[(len(self.dm.get_beats()[self.current_index - 1]) + self.dm.saecg_xcorr_max_locs[
+                         display_data[(len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
                              self.get_current_index()])],
-                         'o')
+                         marker='o')
 
                 plt.plot(
                     (len(self.dm.get_beats()[self.current_index - 1]) + self.p_max_locs[self.current_index]) / self.fs,
@@ -257,7 +258,7 @@ class UIManager:
 
     def next_button_pushed(self, event):
         # print('data type of index : ', type(self.get_current_index()))
-        print('self.dm.saecg_xcorr_max_locs = ', self.dm.saecg_xcorr_max_locs)
+        print('self.dm.xcorr_params[max_loc] = ', self.dm.xcorr_params['max_loc'])
         if self.get_current_index() < len(self.dm.get_beats()) - 1:
             plt.axes(self.ax[4])
             self.set_current_index(self.get_current_index() + 1)
@@ -286,7 +287,7 @@ class UIManager:
         self.dm = self.dm.compute_saecg()
         self.dm = self.dm.compute_saecg_xcorr(self.slider_start.val, self.slider_end.val)
         print('type(self)', type(self))
-        print('UI - self.dm.saecg_xcorr_max_locs=', self.dm.saecg_xcorr_max_locs)
+        print('UI - self.dm.xcorr_params[max_loc]=', self.dm.xcorr_params['max_loc'])
         print('UI - self.dm.xcorr_params[max][self.current_index]=', self.dm.xcorr_params['max'][self.current_index])
 
     def mode_button_pushed(self, event):
