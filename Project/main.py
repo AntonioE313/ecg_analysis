@@ -95,7 +95,8 @@ class dataManager:
             self.xcorr_params['le'][i] = sp.signal.find_peaks(-xcorr_p_window[0:self.xcorr_params['max_loc'][i]],
                                                               distance=self.fs)[0]
 
-            self.xcorr_params['re'][i] = 0
+            self.xcorr_params['re'][i] = sp.signal.find_peaks(-xcorr_p_window[self.xcorr_params['max_loc'][i]:],
+                                                              distance=self.fs)[0] + self.xcorr_params['max_loc'][i]
 
             self.xcorr_params['max'][i] = xcorr[self.xcorr_params['max_loc'][i]]
 
@@ -122,7 +123,7 @@ class dataManager:
             # Set the loc params to be in terms of beat rather than p window
             self.xcorr_params['max_loc'][i] = self.xcorr_params['max_loc'][i] + p_window_le
             self.xcorr_params['le'][i] = self.xcorr_params['le'][i] + p_window_le
-            self.xcorr_params['re'][i] = self.xcorr_params['le'][i] + p_window_le
+            self.xcorr_params['re'][i] = self.xcorr_params['re'][i] + p_window_le
 
             # print('temp.tolist().index(np.amax(temp)) = ', temp.tolist().index(np.amax(temp)))
 
@@ -235,6 +236,11 @@ class UIManager:
                              self.dm.xcorr_params['max_loc'][self.get_current_index()]],
                          marker='o')
 
+                plt.plot(self.dm.xcorr_params['re'][self.get_current_index()] / self.fs,
+                         self.dm.get_beats()[self.current_index][
+                             self.dm.xcorr_params['re'][self.get_current_index()]],
+                         marker='*')
+
             elif self.mode == 2:
                 # Create the array which is the 3 beats index-1 through index + 1
                 display_data = np.append(
@@ -253,6 +259,11 @@ class UIManager:
                     display_data[
                         len(self.dm.get_beats()[self.current_index - 1]) + self.p_max_locs[self.current_index]],
                     marker='x')
+
+                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['re'][self.get_current_index()]) / self.fs,
+                         self.dm.get_beats()[self.current_index][
+                             self.dm.xcorr_params['re'][self.get_current_index()]],
+                         marker='*')
 
             plt.show()
 
