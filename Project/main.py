@@ -4,8 +4,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import pandas as pd
-from matplotlib.widgets import Slider
-
+import config
 
 class dataManager:
     def __init__(self):
@@ -14,7 +13,7 @@ class dataManager:
 
         self.IO = self.IO()
 
-        self.fs = 250
+        self.fs = config.fs
         self.raw_data = self.IO.load_data(self.fs)
         self.beats = []
         self.preprocess_data()
@@ -173,9 +172,9 @@ class dataManager:
 
         def load_data(self, fs):
             print('IO - load data')
-            signal_duration = 240  # signal duration in seconds
+            signal_duration = config.signal_duration  # signal duration in seconds
 
-            raw_data = np.loadtxt(open('Data/e0103.csv', "rb"), skiprows=1)
+            raw_data = np.loadtxt(open(config.data_filepath, "rb"), skiprows=1)
             return raw_data[0:signal_duration * fs, 1]
 
 
