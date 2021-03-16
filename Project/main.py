@@ -8,37 +8,63 @@ from matplotlib.widgets import Slider
 
 
 class dataManager:
-    def __init__(self, beats, raw_data):
-        self.beats = beats
-        self.raw_data = raw_data
-        self.fs = 250
+    def __init__(self):
+        self.heartpy_params = {'wd': '',
+                               'm': ''}
+
         self.IO = self.IO()
+
+        self.fs = 250
+        self.raw_data = self.IO.load_data(self.fs)
+        self.beats = []
+        self.preprocess_data()
 
         self.saecg_window_size = int(0.2 * self.fs)  # Watch for rounding error here, need to convert to int
         self.p_window_center = 0.15  # P window centre as in seconds back from end of beat
-        self.p_window_center_s = np.array([[0] * len(beats)])[0]  # loc of p window centre in samples from start of beat
-        self.p_max_locs = np.array([[0] * len(beats)])[0]  # Pre-allocate size beats[i] -> P_max_locs[i]
+        self.p_window_center_s = np.array([[0] * len(self.beats)])[
+            0]  # loc of p window centre in samples from start of beat
+        self.p_max_locs = np.array([[0] * len(self.beats)])[0]  # Pre-allocate size beats[i] -> P_max_locs[i]
         self.saecg_p_windows = np.tile(np.array(np.ones(shape=(self.saecg_window_size))), (len(self.beats), 1))
         self.saecg_p = np.array(np.ones(shape=self.saecg_window_size))
 
         # A dict holding the arrays corresponding to xcorr params, index i relates to beat[i]
-        self.xcorr_params = {'le': np.array([[0] * len(beats)])[0],
-                             're': np.array([[0] * len(beats)])[0],
-                             'max_loc': np.array([[0] * len(beats)])[0],
-                             'max': np.array([[0.0] * len(beats)])[0]}
+        self.xcorr_params = {'le': np.array([[0] * len(self.beats)])[0],
+                             're': np.array([[0] * len(self.beats)])[0],
+                             'max_loc': np.array([[0] * len(self.beats)])[0],
+                             'max': np.array([[0.0] * len(self.beats)])[0]}
 
         self.find_p_peaks()
         self.compute_saecg()
+
+    def preprocess_data(self):
+        print('DM - preprocess_data')
+        # run analysis
+        self.heartpy_params['wd'], self.heartpy_params['m'] = hp.process(self.raw_data, self.fs)
+        print(self.heartpy_params['wd']['peaklist'])
+        print(self.heartpy_params['wd']['peaklist'][1])
+
+        print(type(self.heartpy_params['wd']['peaklist']))
+        peaklist = self.heartpy_params['wd']['peaklist']
+        for count, value in enumerate(peaklist, start=2):
+            print(value, count)
+            if count < len(peaklist):
+                t1 = peaklist[count - 2]
+                t2 = peaklist[count - 1]
+                self.beats.append(self.raw_data[t1:t2])
+
+        # display computed measures
+        for measure in self.heartpy_params['m'].keys():
+            print('%s: %f' % (measure, self.heartpy_params['m'][measure]))
 
     def find_p_peaks(self):
         # Prepare P windows array
         p_windows = np.tile(np.array(np.ones(shape=self.saecg_window_size)), (len(self.beats), 1))
 
-        for i in range(len(beats)):
-            beat_len = len(beats[i])
+        for i in range(len(self.beats)):
+            beat_len = len(self.beats[i])
             self.p_window_center_s[
                 i] = beat_len - self.p_window_center * self.fs  # p window center in samples (use as index)
-            p_windows[i] = beats[i][round(self.p_window_center_s[i] - 0.5 * self.saecg_window_size):round(
+            p_windows[i] = self.beats[i][round(self.p_window_center_s[i] - 0.5 * self.saecg_window_size):round(
                 self.p_window_center_s[i] + 0.5 * self.saecg_window_size)]
             #    print('p windows.shape : ', p_windows.shape)
             #    print('p windows : ', p_windows)
@@ -145,16 +171,18 @@ class dataManager:
         def dict_as_csv(self, d):
             pd.DataFrame(d).to_csv('test.csv')
 
-        def load_data(self):
+        def load_data(self, fs):
             print('IO - load data')
+            signal_duration = 240  # signal duration in seconds
+
+            raw_data = np.loadtxt(open('Data/e0103.csv', "rb"), skiprows=1)
+            return raw_data[0:signal_duration * fs, 1]
 
 
 class UIManager:
-    def __init__(self, index, dm, wd, m):
+    def __init__(self, index, dm):
         self.current_index = index
         self.dm = dm
-        self.wd = wd
-        self.m = m
         self.raw_data = dm.raw_data
         self.p_max_locs = dm.p_max_locs
         self.saecg_p = dm.saecg_p
@@ -183,8 +211,9 @@ class UIManager:
 
         plt.axes(self.ax[0])
         self.ax[0].set_title('Raw Data')
-        plt.plot(np.true_divide(range(len(raw_data)), self.fs), raw_data)
-        plt.scatter(np.true_divide(wd['peaklist'], self.fs), raw_data[wd['peaklist']], c='g')
+        plt.plot(np.true_divide(range(len(self.raw_data)), self.fs), self.raw_data)
+        plt.scatter(np.true_divide(self.dm.heartpy_params['wd']['peaklist'], self.fs),
+                    self.raw_data[self.dm.heartpy_params['wd']['peaklist']], c='g')
 
         plt.axes(self.ax[1])
         title_string = 'Signal Averaged P Wave'
@@ -263,8 +292,9 @@ class UIManager:
 
                 plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
                     self.get_current_index()]) / self.fs,
-                         display_data[(len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
-                             self.get_current_index()])],
+                         display_data[
+                             (len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
+                                 self.get_current_index()])],
                          marker='o')
 
                 plt.plot(
@@ -273,7 +303,8 @@ class UIManager:
                         len(self.dm.get_beats()[self.current_index - 1]) + self.p_max_locs[self.current_index]],
                     marker='x')
 
-                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['re'][self.get_current_index()]) / self.fs,
+                plt.plot((len(self.dm.get_beats()[self.current_index - 1]) + self.dm.xcorr_params['re'][
+                    self.get_current_index()]) / self.fs,
                          self.dm.get_beats()[self.current_index][
                              self.dm.xcorr_params['re'][self.get_current_index()]],
                          marker='*')
@@ -341,41 +372,8 @@ class UIManager:
         self.current_index = index
 
 
-def startup():
-    signal_duration = 240  # signal duration in seconds
-
-    sample_rate = 250
-
-    data = np.loadtxt(open('Data/e0103.csv', "rb"), skiprows=1)
-    data = data[0:signal_duration * sample_rate, 1]
-
-    # run analysis
-    wd, m = hp.process(data, sample_rate)
-    print(wd['peaklist'])
-    print(wd['peaklist'][1])
-
-    print(type(wd['peaklist']))
-    peaklist = wd['peaklist']
-    beats = []
-    for count, value in enumerate(peaklist, start=2):
-        print(value, count)
-        if count < len(peaklist):
-            t1 = peaklist[count - 2]
-            t2 = peaklist[count - 1]
-            beats.append(data[t1:t2])
-
-    # display computed measures
-    for measure in m.keys():
-        print('%s: %f' % (measure, m[measure]))
-
-    #  p_max_locs = max(beats)
-
-    return beats, wd, m, data
-
-
 # START HERE
-beats, wd, m, raw_data = startup()
-dm = dataManager(beats, raw_data)
-ui = UIManager(1, dm, wd, m)
+dm = dataManager()
+ui = UIManager(1, dm)
 
 plt.show()
