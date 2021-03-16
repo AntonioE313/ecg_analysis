@@ -3,6 +3,7 @@ import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
+import pandas as pd
 from matplotlib.widgets import Slider
 
 
@@ -11,6 +12,8 @@ class dataManager:
         self.beats = beats
         self.raw_data = raw_data
         self.fs = 250
+        self.IO = self.IO()
+
         self.saecg_window_size = int(0.2 * self.fs)  # Watch for rounding error here, need to convert to int
         self.p_window_center = 0.15  # P window centre as in seconds back from end of beat
         self.p_window_center_s = np.array([[0] * len(beats)])[0]  # loc of p window centre in samples from start of beat
@@ -134,9 +137,19 @@ class dataManager:
     def get_saecg_p(self):
         return self.saecg_p
 
+    class IO:
+        def __init__(self):
+            print('IO - init')
+
+        # Save the passed dict as a csv file
+        def dict_as_csv(self, d):
+            pd.DataFrame(d).to_csv('test.csv')
+
+        def load_data(self):
+            print('IO - load data')
+
 
 class UIManager:
-    # ui = UIManager(0, dm.get_beats(), dm.get_p_max_locs(), wd, m, raw_data, dm.get_saecg_p(), dm.saecg_xcorr_vals, dm.fs)
     def __init__(self, index, dm, wd, m):
         self.current_index = index
         self.dm = dm
@@ -297,6 +310,7 @@ class UIManager:
         self.dm = self.dm.find_p_peaks()
         self.dm = self.dm.compute_saecg()
         self.dm = self.dm.compute_saecg_xcorr(self.slider_start.val, self.slider_end.val)
+        self.dm.IO.dict_as_csv(self.dm.xcorr_params)
         print('type(self)', type(self))
         print('UI - self.dm.xcorr_params[max_loc]=', self.dm.xcorr_params['max_loc'])
         print('UI - self.dm.xcorr_params[max][self.current_index]=', self.dm.xcorr_params['max'][self.current_index])
