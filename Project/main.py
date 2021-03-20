@@ -1,9 +1,9 @@
+import heartpy as hp
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import pandas as pd
-import heartpy as hp
 import config
 
 class dataManager:
