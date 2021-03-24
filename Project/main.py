@@ -176,7 +176,7 @@ class dataManager:
         for i in range(len(self.beat_wrapper['beats'])):
             self.beat_wrapper['RR_intervals'][i] = len(self.beat_wrapper['beats'][i])
 
-        # If the RR interval for beat i is < 0.85x the RR interval for beat (i-1) then note beat i as premature
+        # If the RR interval for beat i is < premature_signal_coefficient* the RR interval for beat (i-1) then note beat i as premature
         print('DM - Premature Analysis - self.beat_wrapper[RR_intervals]= ', self.beat_wrapper['RR_intervals'])
         for i in range(1, len(self.beat_wrapper['RR_intervals'])):
             if self.beat_wrapper['RR_intervals'][i] <=\
@@ -213,6 +213,18 @@ class dataManager:
             standard_saecg_p_windows.append(standard_beats[i][t1:t2])
         standard_saecg_p_windows = np.sum(standard_saecg_p_windows, axis=0)
         standard_saecg_p_windows = np.true_divide(standard_saecg_p_windows, NUMBER_OF_STANDARD_BEATS)
+
+        # Get percent change RR interval compared to beat before
+        RRpc = np.array([[0.0] * len(self.beat_wrapper['RR_intervals'])])[0]
+        RRpc[0] = 1
+        for i in range(1, len(RRpc)):
+            RRpc[i] = 100*(self.beat_wrapper['RR_intervals'][i-1] - self.beat_wrapper['RR_intervals'][i])/self.beat_wrapper['RR_intervals'][i-1]
+        plt.figure()
+        plt.title('Instantaneous % change in RR interval vs beat number')
+        plt.plot(RRpc)
+        plt.show()
+        # Get interquartile range
+        # iqr =
 
         return standard_saecg_p_windows
 

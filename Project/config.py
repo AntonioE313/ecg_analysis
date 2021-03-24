@@ -1,7 +1,7 @@
 # Config file for easily changing app behaviour
 data_filepath = 'Data/e0103.csv'
 fs = 250
-signal_duration = 60  # Signal duration in seconds
+signal_duration = 400  # Signal duration in seconds
 
 p_window_center = 0.15  # Initial P window centre as in seconds back from peak of QRS
 saecg_window_size = int(0.2 * fs)  # Watch for rounding error here converting to int
