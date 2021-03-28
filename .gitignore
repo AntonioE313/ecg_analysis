@@ -1,2 +1,6 @@
-Project/venv
+
 Project/.idea
+Project/venv1/*
+Project/__pycache__/config.cpython-39.pyc
+
+
