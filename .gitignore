@@ -1,6 +1,8 @@
-
 Project/.idea
 Project/venv1/*
 Project/__pycache__/config.cpython-39.pyc
-
-
+Project/__pycache__/config.cpython-38.pyc
+Project/idea/
+*.iml
+.idea/*
+Project/test.csv
