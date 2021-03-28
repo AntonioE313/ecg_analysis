@@ -1,24 +1,31 @@
 import heartpy as hp
 import numpy as np
 import scipy as sp
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
-import pandas as pd
 import config
 import physionet as pnet
 
+
+
+
+
 # This is the working branch
 class dataManager:
+    # ryan test 
     def __init__(self):
 
 
 
         self.heartpy_params = {'wd': '',
                                'm': ''}
+        print('DM - TEST')
 
         self.IO = self.IO()
 
-        self.fs = config.fs
+        self.fs = 250
         self.raw_data = self.IO.load_data(self.fs)
 
         beats_temp = self.preprocess_data()  # Placeholder for initializing beats wrapper
@@ -251,9 +258,9 @@ class dataManager:
 
         def load_data(self, fs):
             print('IO - load data')
-            signal_duration = config.signal_duration  # signal duration in seconds
+            signal_duration = 240  # signal duration in seconds
 
-            raw_data = np.loadtxt(open(config.data_filepath, "rb"), skiprows=1)
+            raw_data = np.loadtxt(open('Data/e0103.csv', "rb"), skiprows=1)
             return raw_data[0:signal_duration * fs, 1]
 
 
