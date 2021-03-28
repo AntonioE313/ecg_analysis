@@ -5,10 +5,14 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import pandas as pd
 import config
+import physionet as pnet
 
 # This is the working branch
 class dataManager:
     def __init__(self):
+
+
+
         self.heartpy_params = {'wd': '',
                                'm': ''}
 
