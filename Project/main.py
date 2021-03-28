@@ -219,17 +219,12 @@ class dataManager:
         RRpc[0] = 1
         for i in range(1, len(RRpc)):
             RRpc[i] = 100*(self.beat_wrapper['RR_intervals'][i-1] - self.beat_wrapper['RR_intervals'][i])/self.beat_wrapper['RR_intervals'][i-1]
-        # plt.figure()
-        # plt.title('Instantaneous % change in RR interval vs beat number')
-        # plt.plot(RRpc)
-        # plt.show()
+        plt.figure()
+        plt.title('Instantaneous % change in RR interval vs beat number')
+        plt.plot(RRpc)
+        plt.show()
         # Get interquartile range
         # iqr =
-        # self.IO.dict_as_csv()
-        temp = { 'RRPC_data' : RRpc }
-        self.IO.dict_as_csv(temp, 'ryans_made_this_csv')
-
-
 
         return standard_saecg_p_windows
 
@@ -247,8 +242,8 @@ class dataManager:
             print('IO - init')
 
         # Save the passed dict as a csv file
-        def dict_as_csv(self, d, title_string):
-            pd.DataFrame(d).to_csv(title_string)
+        def dict_as_csv(self, d):
+            pd.DataFrame(d).to_csv('test.csv')
 
         def load_data(self, fs):
             print('IO - load data')
@@ -453,7 +448,6 @@ class UIManager:
         print('UI - premature')
         standard_beats = self.dm.premature_analysis(x)
         self.refresh_saecg_view(standard_beats, 'SAECG of standard P-waves')
-
 
     def slider_updated(self, event):
         plt.axes(self.ax[1])
