@@ -1,5 +1,6 @@
 Project/.idea
 Project/venv1/*
+Project/venv/*
 Project/__pycache__/config.cpython-39.pyc
 Project/__pycache__/config.cpython-38.pyc
 Project/idea/
