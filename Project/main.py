@@ -14,12 +14,15 @@ class dataManager:
         self.heartpy_params = {'wd': '',
                                'm': ''}
         print('DM - TEST')
-        self.fs = config.fs
         self.IO = self.IO()
 
-        temp = self.IO.wfdb_load()
-        self.raw_data = temp['data']
-        self.fs = temp['fs']
+        temp_dict = self.IO.wfdb_load()
+        self.raw_data = temp_dict['data']
+
+        self.data_wrapper = {'raw_data': self.raw_data,
+                             'filtered_data': self.raw_data * 0}
+
+        self.fs = temp_dict['fs'] * config.upsample_coefficient
         print('DM - self.fs= ', self.fs)
         beats_temp = self.preprocess_data()  # Placeholder for initializing beats wrapper
 
@@ -49,25 +52,25 @@ class dataManager:
                              'max_loc': np.array([[0] * len(self.beat_wrapper['beats'])])[0],
                              'max': np.array([[0.0] * len(self.beat_wrapper['beats'])])[0]}
 
-        # temp_dict = self.find_p_peaks(self.beat_wrapper['beats'], self.beat_wrapper['p_window_center_s'])
-
-    #  temp_dict = self.find_p_peaks([], [])
-    #  self.beat_wrapper['p_max_locs'] = temp_dict['p_max_locs']
-    #  self.saecg_wrapper['p_windows'] = temp_dict['p_windows']
-    # self.beat_wrapper['p_window_center']
-    #  self.compute_saecg()
+        temp_dict = self.find_p_peaks(self.beat_wrapper['beats'], self.beat_wrapper['p_window_center_s'])
+        self.beat_wrapper['p_max_locs'] = temp_dict['p_max_locs']
+        self.saecg_wrapper['p_windows'] = temp_dict['p_windows']
+        # self.beat_wrapper['p_window_center']
+        self.compute_saecg()
 
     def preprocess_data(self):
         print('DM - preprocess_data')
         # run analysis
-        resampled_data = sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data))
-        filtered_data = hp.filter_signal(resampled_data, cutoff=0.05, sample_rate=self.fs*config.upsample_coefficient, filtertype='notch')
-        self.heartpy_params['wd'], self.heartpy_params['m'] = hp.process(hp.scale_data(filtered_data), self.fs*config.upsample_coefficient)
+        self.data_wrapper['filtered_data'] = hp.filter_signal(self.data_wrapper['raw_data'], cutoff=0.05,
+                                                              sample_rate=self.fs,
+                                                              filtertype='notch')
+        self.heartpy_params['wd'], self.heartpy_params['m'] = hp.process(
+            hp.scale_data(self.data_wrapper['filtered_data']), self.fs)
 
-        plt.figure()
-        plt.plot(filtered_data)
-        plt.plot(resampled_data)
-        plt.show()
+        # plt.figure()
+        # plt.plot(self.data_wrapper['raw_data'])
+        # plt.plot(self.data_wrapper['filtered_data'])
+        # plt.show()
 
         print(self.heartpy_params['wd']['peaklist'])
         print(self.heartpy_params['wd']['peaklist'][1])
@@ -81,7 +84,8 @@ class dataManager:
             if count < len(peaklist):
                 t1 = peaklist[count - 2]
                 t2 = peaklist[count - 1]
-                beats.append(self.raw_data[t1:t2])
+                # beats.append(self.data_wrapper['raw_data'][t1:t2])
+                beats.append(self.data_wrapper['filtered_data'][t1:t2])
 
         # display computed measures
         for measure in self.heartpy_params['m'].keys():
@@ -94,10 +98,14 @@ class dataManager:
         # Prepare P windows array
         p_windows = np.tile(np.array(np.ones(shape=config.saecg_window_size)), (len(beats), 1))
         p_max_locs = np.array([[0] * len(beats)])[0]
-
         for i in range(len(beats)):
             # Generate the P windows
             beat_len = len(beats[i])
+
+            if beat_len == 0:
+                p_max_locs[i] = 0
+                continue
+
             print('beat_len= ', beat_len)
             print('config.p_window_center= ', config.p_window_center)
             print('self.fs= ', self.fs)
@@ -105,18 +113,19 @@ class dataManager:
                 i] = beat_len - config.p_window_center * self.fs  # p window center in samples (use as index)
             t1 = round(p_window_center_s[i] - 0.5 * config.saecg_window_size)
             t2 = round(p_window_center_s[i] + 0.5 * config.saecg_window_size)
-            debug_functions.array_inspect(p_windows, 'p_windows', True)
-            debug_functions.array_inspect(np.array(beats), 'beats', True)
+            debug_functions.array_inspect(p_windows, 'p_windows', False)
+            # debug_functions.array_inspect(np.ndarray(beats), 'beats', False)
             print('t1 t2, ', t1, t2)
             print('p_window_center_s[i]', p_window_center_s[i])
             p_windows[i] = beats[i][t1:t2]
-            p_max_locs_temp = sp.signal.find_peaks(p_windows[i], distance=len(p_windows[i]))
+            p_max_locs_temp = sp.signal.find_peaks(p_windows[i], distance=len(p_windows[i]))[0]
             if len(p_max_locs_temp) > 1:  # If there are equal maxima with same value, take first one
                 p_max_locs[i] = p_max_locs_temp[0]
 
             #   print('p_max_locs[i] = ', self.p_max_locs[i])
             p_max_locs[i] = p_max_locs[i] + self.beat_wrapper['p_window_center_s'][i] - round(
                 0.5 * config.saecg_window_size)
+            print('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
 
         return {'self': self,
                 'p_windows': p_windows,
@@ -278,19 +287,21 @@ class dataManager:
 
         def wfdb_load(self):
             print('IO - wfdb load executed')
-            raw_data = wfdb.rdrecord(config.data_filepath)
-            print('IO - raw_data.fs=', raw_data.fs)
+            record = wfdb.rdrecord(config.data_filepath)
+            raw_data = record.p_signal[0:record.fs * config.signal_duration, 1]
+            print('IO - record.fs=', record.fs)
 
             # Debug plots
             plt.figure()
-            plt.plot(raw_data.p_signal[0:raw_data.fs * config.signal_duration, 1])
+            plt.plot(raw_data)
             plt.show()
 
             print('IO - type(raw data)=', type(raw_data))
             print('IO - np.shape(raw data)=', np.shape(raw_data))
+            resampled_data = sp.signal.resample(raw_data, config.upsample_coefficient * len(raw_data))
 
-            return {'data': raw_data.p_signal[0:raw_data.fs * config.signal_duration, 1],
-                    'fs': raw_data.fs}
+            return {'data': resampled_data,
+                    'fs': record.fs}
 
 
 class UIManager:
@@ -329,25 +340,31 @@ class UIManager:
 
         plt.axes(self.ax[0])
         self.ax[0].set_title('Raw Data')
-        plt.plot(np.true_divide(range(len(sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data)))), self.fs),
-                 sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data)))
-        plt.scatter(np.true_divide(self.dm.heartpy_params['wd']['peaklist'], self.fs),
-                    sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data))[self.dm.heartpy_params['wd']['peaklist']], c='g')
+        plt.plot(np.true_divide(
+            range(len(sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data)))),
+            self.fs * config.upsample_coefficient),
+            sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data)))
+        plt.scatter(np.true_divide(self.dm.heartpy_params['wd']['peaklist'], self.fs * config.upsample_coefficient),
+                    sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data))[
+                        self.dm.heartpy_params['wd']['peaklist']], c='g')
 
         plt.axes(self.ax[1])
         title_string = 'Signal Averaged P Wave'
         self.ax[1].set_title(title_string)
-        plt.plot(np.true_divide(range(len(self.saecg_p)), self.fs), self.saecg_p)
+        plt.plot(np.true_divide(range(len(self.saecg_p)), self.fs * config.upsample_coefficient), self.saecg_p)
 
         # Make the slider for left edge
         plt.axes(self.ax[2])
-        self.slider_start = plt.Slider(self.ax[2], 'Start', 0, len(self.saecg_p) / self.fs,
-                                       valinit=0.1 * len(self.saecg_p) / self.fs, color='blue')
+        self.slider_start = plt.Slider(self.ax[2], 'Start', 0,
+                                       len(self.saecg_p) / (self.fs * config.upsample_coefficient),
+                                       valinit=0.1 * len(self.saecg_p) / self.fs * config.upsample_coefficient,
+                                       color='blue')
         self.slider_start.on_changed(lambda x: self.slider_updated(x))
         # Make the slider for right edge
         plt.axes(self.ax[3])
-        self.slider_end = plt.Slider(self.ax[3], 'End', 0, len(self.saecg_p) / self.fs,
-                                     valinit=0.9 * len(self.saecg_p) / self.fs, color='blue')
+        self.slider_end = plt.Slider(self.ax[3], 'End', 0, len(self.saecg_p) / (self.fs * config.upsample_coefficient),
+                                     valinit=0.9 * len(self.saecg_p) / self.fs * config.upsample_coefficient,
+                                     color='blue')
         self.slider_end.on_changed(lambda x: self.slider_updated(x))
 
         plt.axes(self.ax[1])
@@ -361,7 +378,8 @@ class UIManager:
         title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(dm.beat_wrapper['beats']))
         self.ax[4].set_title(title_string)
 
-        plt.plot(np.true_divide(range(len(self.dm.beat_wrapper['beats'][self.current_index])), self.fs),
+        plt.plot(np.true_divide(range(len(self.dm.beat_wrapper['beats'][self.current_index])),
+                                self.fs * config.upsample_coefficient),
                  self.dm.beat_wrapper['beats'][self.current_index])
 
         plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
@@ -369,7 +387,7 @@ class UIManager:
                      round(self.p_max_locs[self.get_current_index()])],
                  marker='x')
 
-        plt.plot(self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs,
+        plt.plot(self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs * config.upsample_coefficient,
                  self.dm.beat_wrapper['beats'][self.current_index][
                      self.dm.xcorr_params['max_loc'][self.get_current_index()]],
                  'o')
@@ -382,7 +400,7 @@ class UIManager:
         print('UI - refresh_saecg_view')
         plt.axes(self.ax[1])
         self.ax[1].set_title(title_string)
-        plt.plot(np.true_divide(range(len(saecg)), self.fs), saecg)
+        plt.plot(np.true_divide(range(len(saecg)), self.fs * config.upsample_coefficient), saecg)
         plt.show()
 
     def refresh_beat_viewer(self):
@@ -393,38 +411,32 @@ class UIManager:
             self.ax[4].set_title(title_string)
 
             if self.mode == 1:
-                plt.plot(np.true_divide(range(len(self.dm.beat_wrapper['beats'][self.current_index])), self.fs),
+                plt.plot(np.true_divide(range(len(self.dm.beat_wrapper['beats'][self.current_index])),
+                                        self.fs * config.upsample_coefficient),
                          self.dm.beat_wrapper['beats'][self.current_index])
 
-                plt.plot(self.dm.beat_wrapper['p_max_locs'][self.get_current_index()] / self.fs,
+                plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
                          self.dm.beat_wrapper['beats'][self.get_current_index()][
-                             round(self.dm.beat_wrapper['p_max_locs'][self.get_current_index()])],
+                             round(self.p_max_locs[self.get_current_index()])],
                          marker='x')
 
-                plt.plot(self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs,
-                         self.dm.beat_wrapper['beats'][self.current_index][
-                             self.dm.xcorr_params['max_loc'][self.get_current_index()]],
-                         marker='o')
-
-                plt.plot(self.dm.xcorr_params['re'][self.get_current_index()] / self.fs,
-                         self.dm.beat_wrapper['beats'][self.current_index][
-                             self.dm.xcorr_params['re'][self.get_current_index()]],
-                         marker='*')
+                plt.plot(
+                    self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs * config.upsample_coefficient,
+                    self.dm.beat_wrapper['beats'][self.current_index][
+                        self.dm.xcorr_params['max_loc'][self.get_current_index()]],
+                    'o')
 
             elif self.mode == 2:
                 # Create the array which is the 3 beats index-1 through index + 1
-                display_data = np.append(
-                    np.append(self.dm.beat_wrapper['beats'][self.current_index - 1],
-                              self.dm.beat_wrapper['beats'][self.current_index]),
-                    self.dm.beat_wrapper['beats'][self.current_index + 1])
+                display_data = np.append(np.append(self.dm.beat_wrapper['beats'][self.current_index - 1],
+                                                   self.dm.beat_wrapper['beats'][self.current_index]),
+                                         self.dm.beat_wrapper['beats'][self.current_index + 1])
                 plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
 
                 plt.plot((len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
                     self.get_current_index()]) / self.fs,
-                         display_data[
-                             (len(self.dm.beat_wrapper['beats'][self.current_index - 1]) +
-                              self.dm.xcorr_params['max_loc'][
-                                  self.get_current_index()])],
+                         display_data[(len(self.dm.beat_wrapper['beats'][self.current_index - 1]) +
+                                       self.dm.xcorr_params['max_loc'][self.get_current_index()])],
                          marker='o')
 
                 plt.plot(
@@ -464,9 +476,9 @@ class UIManager:
     def prev_button_pushed(self, event):
         if self.get_current_index() > 0:
             plt.axes(self.ax[4])
-            self.set_current_index(self.get_current_index() - 1)
+            self.set_current_index(self.current_index - 1)
             self.ax[4].clear()
-            title_string = 'Beat %d out of %d beats' % (self.get_current_index() + 1, len(dm.beat_wrapper['beats']))
+            title_string = 'Beat %d out of %d beats' % (self.current_index + 1, len(dm.beat_wrapper['beats']))
             self.ax[4].set_title(title_string)
             self.refresh_beat_viewer()
 
