@@ -1,33 +1,26 @@
 import heartpy as hp
-import numpy as np
 import scipy as sp
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import config
-import physionet as pnet
+import debug_functions
+import wfdb as wfdb
 
 
-
-
-
-# This is the working branch
 class dataManager:
-    # ryan test 
     def __init__(self):
-
-
-
         self.heartpy_params = {'wd': '',
                                'm': ''}
         print('DM - TEST')
-
+        self.fs = config.fs
         self.IO = self.IO()
 
-        self.fs = 250
-        self.raw_data = self.IO.load_data(self.fs)
-
+        temp = self.IO.wfdb_load()
+        self.raw_data = temp['data']
+        self.fs = temp['fs']
+        print('DM - self.fs= ', self.fs)
         beats_temp = self.preprocess_data()  # Placeholder for initializing beats wrapper
 
         # Dict for holding beat and data that is related index i to beat[i]
@@ -37,6 +30,7 @@ class dataManager:
                              'p_max_locs': np.array([[0] * len(beats_temp)])[0],
                              'premature': np.array([[0] * len(beats_temp)])[0],
                              'RR_intervals': np.array([[0.0] * len(beats_temp)])[0]}
+
         # Premature is 1 for premature 0 otherwise
         self.p_max_locs = np.array([[0] * len(self.beat_wrapper['beats'])])[
             0]  # Pre-allocate size beats[i] -> P_max_locs[i]
@@ -55,16 +49,26 @@ class dataManager:
                              'max_loc': np.array([[0] * len(self.beat_wrapper['beats'])])[0],
                              'max': np.array([[0.0] * len(self.beat_wrapper['beats'])])[0]}
 
-        temp_dict = self.find_p_peaks(self.beat_wrapper['beats'], self.beat_wrapper['p_window_center_s'])
-        self.beat_wrapper['p_max_locs'] = temp_dict['p_max_locs']
-        self.saecg_wrapper['p_windows'] = temp_dict['p_windows']
-        # self.beat_wrapper['p_window_center']
-        self.compute_saecg()
+        # temp_dict = self.find_p_peaks(self.beat_wrapper['beats'], self.beat_wrapper['p_window_center_s'])
+
+    #  temp_dict = self.find_p_peaks([], [])
+    #  self.beat_wrapper['p_max_locs'] = temp_dict['p_max_locs']
+    #  self.saecg_wrapper['p_windows'] = temp_dict['p_windows']
+    # self.beat_wrapper['p_window_center']
+    #  self.compute_saecg()
 
     def preprocess_data(self):
         print('DM - preprocess_data')
         # run analysis
-        self.heartpy_params['wd'], self.heartpy_params['m'] = hp.process(self.raw_data, self.fs)
+        resampled_data = sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data))
+        filtered_data = hp.filter_signal(resampled_data, cutoff=0.05, sample_rate=self.fs*config.upsample_coefficient, filtertype='notch')
+        self.heartpy_params['wd'], self.heartpy_params['m'] = hp.process(hp.scale_data(filtered_data), self.fs*config.upsample_coefficient)
+
+        plt.figure()
+        plt.plot(filtered_data)
+        plt.plot(resampled_data)
+        plt.show()
+
         print(self.heartpy_params['wd']['peaklist'])
         print(self.heartpy_params['wd']['peaklist'][1])
 
@@ -94,13 +98,18 @@ class dataManager:
         for i in range(len(beats)):
             # Generate the P windows
             beat_len = len(beats[i])
-            p_window_center_s[i] = beat_len - config.p_window_center * self.fs  # p window center in samples (use as index)
+            print('beat_len= ', beat_len)
+            print('config.p_window_center= ', config.p_window_center)
+            print('self.fs= ', self.fs)
+            p_window_center_s[
+                i] = beat_len - config.p_window_center * self.fs  # p window center in samples (use as index)
             t1 = round(p_window_center_s[i] - 0.5 * config.saecg_window_size)
             t2 = round(p_window_center_s[i] + 0.5 * config.saecg_window_size)
+            debug_functions.array_inspect(p_windows, 'p_windows', True)
+            debug_functions.array_inspect(np.array(beats), 'beats', True)
+            print('t1 t2, ', t1, t2)
+            print('p_window_center_s[i]', p_window_center_s[i])
             p_windows[i] = beats[i][t1:t2]
-            #    print('p windows.shape : ', p_windows.shape)
-            #    print('p windows : ', p_windows)
-            # temp = np.where(p_windows[i] == np.amax(p_windows[i]))[0]
             p_max_locs_temp = sp.signal.find_peaks(p_windows[i], distance=len(p_windows[i]))
             if len(p_max_locs_temp) > 1:  # If there are equal maxima with same value, take first one
                 p_max_locs[i] = p_max_locs_temp[0]
@@ -190,7 +199,7 @@ class dataManager:
         # If the RR interval for beat i is < premature_signal_coefficient* the RR interval for beat (i-1) then note beat i as premature
         print('DM - Premature Analysis - self.beat_wrapper[RR_intervals]= ', self.beat_wrapper['RR_intervals'])
         for i in range(1, len(self.beat_wrapper['RR_intervals'])):
-            if self.beat_wrapper['RR_intervals'][i] <=\
+            if self.beat_wrapper['RR_intervals'][i] <= \
                     config.premature_signal_coefficient * self.beat_wrapper['RR_intervals'][i - 1]:
                 self.beat_wrapper['premature'][i] = 1
             else:
@@ -198,8 +207,8 @@ class dataManager:
 
         NUMBER_OF_STANDARD_BEATS = len(self.beat_wrapper['beats']) - np.sum(self.beat_wrapper['premature'])
 
-        #print('DM - premature beats= ', np.sum(self.beat_wrapper['premature']))
-        #print('DM - standard beats= ', NUMBER_OF_STANDARD_BEATS)
+        # print('DM - premature beats= ', np.sum(self.beat_wrapper['premature']))
+        # print('DM - standard beats= ', NUMBER_OF_STANDARD_BEATS)
 
         # Compute SAECG of non premature (standard) beats
         standard_beats = []
@@ -210,17 +219,17 @@ class dataManager:
         temp_dict = self.find_p_peaks(standard_beats, self.beat_wrapper['p_window_center_s'])
         standard_p_max_locs = temp_dict['p_max_locs']
         # (STATE VARIABLES FOR P PEAK LOCATION)
-        #print('DM - standard_p_max_locs= ', standard_p_max_locs)
+        # print('DM - standard_p_max_locs= ', standard_p_max_locs)
         standard_saecg_p_windows = []
-        #print('DM - beat len 0 1 = ', len(self.beat_wrapper['beats'][0]), len(self.beat_wrapper['beats'][1]))
+        # print('DM - beat len 0 1 = ', len(self.beat_wrapper['beats'][0]), len(self.beat_wrapper['beats'][1]))
         for i in range(NUMBER_OF_STANDARD_BEATS):
-        #    print('DM - i=', i)
+            #    print('DM - i=', i)
             t1 = int(standard_p_max_locs[i] - 0.5 * config.saecg_window_size)
             t2 = int(standard_p_max_locs[i] + 0.5 * config.saecg_window_size)
-        #    print('DM - len(standard_beats[i])= ', len(standard_beats[i]))
-        #    print('DM - t1 t2 ', t1, t2)
-        #    print('standard_beats[i][t1:t2]', standard_beats[i][t1:t2])
-        #    print('standard_saecg_p_windows= ', standard_saecg_p_windows)
+            #    print('DM - len(standard_beats[i])= ', len(standard_beats[i]))
+            #    print('DM - t1 t2 ', t1, t2)
+            #    print('standard_beats[i][t1:t2]', standard_beats[i][t1:t2])
+            #    print('standard_saecg_p_windows= ', standard_saecg_p_windows)
             standard_saecg_p_windows.append(standard_beats[i][t1:t2])
         standard_saecg_p_windows = np.sum(standard_saecg_p_windows, axis=0)
         standard_saecg_p_windows = np.true_divide(standard_saecg_p_windows, NUMBER_OF_STANDARD_BEATS)
@@ -229,7 +238,8 @@ class dataManager:
         RRpc = np.array([[0.0] * len(self.beat_wrapper['RR_intervals'])])[0]
         RRpc[0] = 1
         for i in range(1, len(RRpc)):
-            RRpc[i] = 100*(self.beat_wrapper['RR_intervals'][i-1] - self.beat_wrapper['RR_intervals'][i])/self.beat_wrapper['RR_intervals'][i-1]
+            RRpc[i] = 100 * (self.beat_wrapper['RR_intervals'][i - 1] - self.beat_wrapper['RR_intervals'][i]) / \
+                      self.beat_wrapper['RR_intervals'][i - 1]
         plt.figure()
         plt.title('Instantaneous % change in RR interval vs beat number')
         plt.plot(RRpc)
@@ -256,12 +266,31 @@ class dataManager:
         def dict_as_csv(self, d):
             pd.DataFrame(d).to_csv('test.csv')
 
-        def load_data(self, fs):
+        def csv_load(self, fs):
             print('IO - load data')
-            signal_duration = 240  # signal duration in seconds
+            signal_duration = config.signal_duration
 
-            raw_data = np.loadtxt(open('Data/e0103.csv', "rb"), skiprows=1)
-            return raw_data[0:signal_duration * fs, 1]
+            print('IO - config.data_filepath[-3:]=', config.data_filepath[-3:])
+            if config.data_filepath[-3:] == 'csv':
+                print('IO - csv load executed')
+                raw_data = np.loadtxt(open(config.data_filepath, "rb"), skiprows=1)
+                return raw_data[0:signal_duration * fs, 1]
+
+        def wfdb_load(self):
+            print('IO - wfdb load executed')
+            raw_data = wfdb.rdrecord(config.data_filepath)
+            print('IO - raw_data.fs=', raw_data.fs)
+
+            # Debug plots
+            plt.figure()
+            plt.plot(raw_data.p_signal[0:raw_data.fs * config.signal_duration, 1])
+            plt.show()
+
+            print('IO - type(raw data)=', type(raw_data))
+            print('IO - np.shape(raw data)=', np.shape(raw_data))
+
+            return {'data': raw_data.p_signal[0:raw_data.fs * config.signal_duration, 1],
+                    'fs': raw_data.fs}
 
 
 class UIManager:
@@ -300,9 +329,10 @@ class UIManager:
 
         plt.axes(self.ax[0])
         self.ax[0].set_title('Raw Data')
-        plt.plot(np.true_divide(range(len(self.raw_data)), self.fs), self.raw_data)
+        plt.plot(np.true_divide(range(len(sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data)))), self.fs),
+                 sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data)))
         plt.scatter(np.true_divide(self.dm.heartpy_params['wd']['peaklist'], self.fs),
-                    self.raw_data[self.dm.heartpy_params['wd']['peaklist']], c='g')
+                    sp.signal.resample(self.raw_data, config.upsample_coefficient * len(self.raw_data))[self.dm.heartpy_params['wd']['peaklist']], c='g')
 
         plt.axes(self.ax[1])
         title_string = 'Signal Averaged P Wave'
@@ -397,9 +427,11 @@ class UIManager:
                                   self.get_current_index()])],
                          marker='o')
 
-                plt.plot((len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
+                plt.plot(
+                    (len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
                         self.current_index]) / self.fs,
-                    display_data[len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
+                    display_data[
+                        len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
                             self.current_index]],
                     marker='x')
 
@@ -439,7 +471,8 @@ class UIManager:
             self.refresh_beat_viewer()
 
     def analyze_button_pushed(self, event):
-        self.dm.find_p_peaks(beats=self.dm.beat_wrapper['beats'], p_window_center_s=self.dm.beat_wrapper['p_window_center_s'])
+        self.dm.find_p_peaks(beats=self.dm.beat_wrapper['beats'],
+                             p_window_center_s=self.dm.beat_wrapper['p_window_center_s'])
         self.dm.compute_saecg()
         self.dm.compute_saecg_xcorr(self.slider_start.val, self.slider_end.val)
         self.dm.IO.dict_as_csv(self.dm.xcorr_params)

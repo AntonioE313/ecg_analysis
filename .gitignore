@@ -7,3 +7,4 @@ Project/idea/
 *.iml
 .idea/*
 Project/test.csv
+Project/__pycache__/debug_functions.cpython-38.pyc
