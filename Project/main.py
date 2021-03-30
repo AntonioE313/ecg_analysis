@@ -7,6 +7,8 @@ from matplotlib.widgets import Button
 import config
 import debug_functions
 import wfdb as wfdb
+import neurokit2 as nk2
+import math
 
 
 class dataManager:
@@ -38,9 +40,9 @@ class dataManager:
         self.p_max_locs = np.array([[0] * len(self.beat_wrapper['beats'])])[
             0]  # Pre-allocate size beats[i] -> P_max_locs[i]
 
-        self.SAECG_P_WINDOW_SIZE = int((1 / 16) * self.fs)
+        self.SAECG_P_WINDOW_SIZE = int(0.19921875 * self.fs)  # Need to work out this number for even integer window size
 
-        saecg_p_windows = np.tile(np.array(np.ones(shape=(self.SAECG_P_WINDOW_SIZE))),
+        saecg_p_windows = np.tile(np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE)),
                                   (len(self.beat_wrapper['beats']), 1))
 
         saecg_p = np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE))
@@ -55,6 +57,20 @@ class dataManager:
                              'max_loc': np.array([[0] * len(self.beat_wrapper['beats'])])[0],
                              'max': np.array([[0.0] * len(self.beat_wrapper['beats'])])[0]}
 
+        signal, waves = nk2.ecg_delineate(self.data_wrapper['raw_data'], self.heartpy_params['wd']['peaklist'],
+                                          sampling_rate=3000, method="dwt", show=False,
+                                          show_type='all')
+
+        # Set all the Nan datapoints to 0 so they aren't a problem but don't mess up match with other beat by beat data
+        for i in range(len(waves['ECG_P_Onsets'])):
+            if math.isnan(waves['ECG_P_Onsets'][i]):
+                waves['ECG_P_Onsets'][i] = 0
+            if math.isnan(waves['ECG_P_Peaks'][i]):
+                waves['ECG_P_Peaks'][i] = 0
+
+        self.neurokit_params = {'signal': signal,
+                                'waves': waves}
+
         temp_dict = self.find_p_peaks(self.beat_wrapper['beats'], self.beat_wrapper['p_window_center_s'])
         self.beat_wrapper['p_max_locs'] = temp_dict['p_max_locs']
         self.saecg_wrapper['p_windows'] = temp_dict['p_windows']
@@ -67,7 +83,7 @@ class dataManager:
                                                               sample_rate=self.fs,
                                                               filtertype='notch')
 
-        self.heartpy_params['wd'], self.heartpy_params['m'] = hp.process(hp.scale_data(self.data_wrapper['filtered_data']),
+        self.heartpy_params['wd'], self.heartpy_params['m'] = hp.process(hp.scale_data(self.data_wrapper['raw_data']),
                                                                          self.fs)
 
         # plt.figure()
@@ -87,8 +103,8 @@ class dataManager:
             if count < len(peaklist):
                 t1 = peaklist[count - 2]
                 t2 = peaklist[count - 1]
-                # beats.append(self.data_wrapper['raw_data'][t1:t2])
-                beats.append(self.data_wrapper['filtered_data'][t1:t2])
+                beats.append(self.data_wrapper['raw_data'][t1:t2])
+                # beats.append(self.data_wrapper['filtered_data'][t1:t2])
 
         # display computed measures
         for measure in self.heartpy_params['m'].keys():
@@ -99,7 +115,7 @@ class dataManager:
     # Need to make this function flexible not just for all beats, can take subset of beats
     def find_p_peaks(self, beats, p_window_center_s):
         # Prepare P windows array
-        p_windows = np.tile(np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE)), (len(beats), 1))
+        p_windows = np.tile(np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE-1)), (len(beats), 1))
         p_max_locs = np.array([[0] * len(beats)])[0]
         for i in range(len(beats)):
             # Generate the P windows
@@ -112,9 +128,11 @@ class dataManager:
             print('beat_len= ', beat_len)
             print('config.p_window_center= ', config.p_window_center)
             print('self.fs= ', self.fs)
-            self.beat_wrapper['p_window_center_s'][i] = beat_len - config.p_window_center * self.fs  # p window center in samples (use as index)
-            t1 = round(self.beat_wrapper['p_window_center_s'][i] - 0.5 * self.SAECG_P_WINDOW_SIZE)
-            t2 = round(self.beat_wrapper['p_window_center_s'][i] + 0.5 * self.SAECG_P_WINDOW_SIZE)
+
+            # p window center in samples (use as index)
+            self.beat_wrapper['p_window_center_s'][i] = beat_len - int(config.p_window_center * self.fs)
+            t1 = math.ceil(self.beat_wrapper['p_window_center_s'][i] - 0.5 * self.SAECG_P_WINDOW_SIZE)
+            t2 = t1 + self.SAECG_P_WINDOW_SIZE
             debug_functions.array_inspect(p_windows, 'p_windows', False)
             # debug_functions.array_inspect(np.ndarray(beats), 'beats', False)
             print('t1 t2, ', t1, t2)
@@ -134,14 +152,16 @@ class dataManager:
                 'p_max_locs': p_max_locs}
 
     def compute_saecg(self):
-        print('DM - self.beat_wrapper[p_max_locs][1]= ', self.beat_wrapper['p_max_locs'][1])
         for i in range(len(self.p_max_locs)):
             print()
-            t1 = int(self.beat_wrapper['p_max_locs'][i] - 0.5 * self.SAECG_P_WINDOW_SIZE)
-            t2 = int(self.beat_wrapper['p_max_locs'][i] + 0.5 * self.SAECG_P_WINDOW_SIZE)
+            t1 = math.ceil(self.beat_wrapper['p_max_locs'][i] - 0.5 * self.SAECG_P_WINDOW_SIZE)
+            t2 = t1 + self.SAECG_P_WINDOW_SIZE-1
+            debug_functions.array_inspect(self.saecg_wrapper['p_windows'][i], 'self.saecg_wrapper[p_windows][i] ', False)
+            debug_functions.array_inspect(self.beat_wrapper['beats'][i][t1:t2], 'self.beat_wrapper[beats][i][t1:t2]', False)
             self.saecg_wrapper['p_windows'][i] = self.beat_wrapper['beats'][i][t1:t2]
         self.saecg_wrapper['saecg_p'] = np.sum(self.saecg_wrapper['p_windows'], axis=0)
         self.saecg_wrapper['saecg_p'] = np.true_divide(self.saecg_wrapper['saecg_p'], len(self.beat_wrapper['beats']))
+        debug_functions.array_inspect(self.saecg_wrapper['saecg_p'], 'saecg_p', False)
         return self
 
     # Compute the xcorr of SAECG with the array of beats using le and re of P template (specified by user)
@@ -291,12 +311,12 @@ class dataManager:
             print('IO - wfdb load executed')
             record = wfdb.rdrecord(config.data_filepath)
             raw_data = record.p_signal[0:record.fs * config.signal_duration, 1]
-            print('IO - record.fs=', record.fs)
+            print('IO - record.fs= ', record.fs)
 
             # Debug plots
-            plt.figure()
-            plt.plot(raw_data)
-            plt.show()
+            # plt.figure()
+            # plt.plot(raw_data)
+            # plt.show()
 
             print('IO - type(raw data)=', type(raw_data))
             print('IO - np.shape(raw data)=', np.shape(raw_data))
@@ -310,7 +330,7 @@ class UIManager:
     def __init__(self, index, dm):
         self.current_index = index
         self.dm = dm
-        self.raw_data = dm.raw_data
+        self.raw_data = dm.data_wrapper['raw_data']
         self.p_max_locs = dm.p_max_locs
         self.fs = dm.fs
         self.mode = 1  # view mode for beat viewer
@@ -341,23 +361,25 @@ class UIManager:
 
         plt.axes(self.ax[0])
         self.ax[0].set_title('Raw Data')
-        plt.plot(np.true_divide(
-            range(len(sp.signal.resample(self.raw_data, len(self.raw_data)))),
-            self.fs),
-            sp.signal.resample(self.raw_data, len(self.raw_data)))
+        plt.plot(np.true_divide(range(len(sp.signal.resample(self.raw_data, len(self.raw_data)))), self.fs),
+                 self.raw_data)
+
         plt.scatter(np.true_divide(self.dm.heartpy_params['wd']['peaklist'], self.fs),
-                    sp.signal.resample(self.raw_data, len(self.raw_data))[
-                        self.dm.heartpy_params['wd']['peaklist']], c='g')
+                    self.raw_data[self.dm.heartpy_params['wd']['peaklist']], c='g')
+
+        plt.scatter(np.true_divide(self.dm.neurokit_params['waves']['ECG_P_Peaks'], self.fs),
+                    self.raw_data[self.dm.neurokit_params['waves']['ECG_P_Peaks']], marker='x', c='r')
 
         plt.axes(self.ax[1])
         title_string = 'Signal Averaged P Wave'
         self.ax[1].set_title(title_string)
-        plt.plot(np.true_divide(range(len(self.dm.saecg_wrapper['saecg_p'])), self.fs), self.dm.saecg_wrapper['saecg_p'])
+        plt.plot(np.true_divide(range(len(self.dm.saecg_wrapper['saecg_p'])), self.fs),
+                 self.dm.saecg_wrapper['saecg_p'])
 
         # Make the slider for left edge
         plt.axes(self.ax[2])
         self.slider_start = plt.Slider(self.ax[2], 'Start', 0,
-                                       len(self.dm.saecg_wrapper['saecg_p']) / (self.fs),
+                                       len(self.dm.saecg_wrapper['saecg_p']) / self.fs,
                                        valinit=0.1 * len(self.dm.saecg_wrapper['saecg_p']) / self.fs,
                                        color='blue')
         self.slider_start.on_changed(lambda x: self.slider_updated(x))
@@ -369,9 +391,11 @@ class UIManager:
         self.slider_end.on_changed(lambda x: self.slider_updated(x))
 
         plt.axes(self.ax[1])
-        self.ax[1].vlines(self.slider_start.val, self.dm.saecg_wrapper['saecg_p'][int(self.slider_start.val * self.fs)] - 0.02,
+        self.ax[1].vlines(self.slider_start.val,
+                          self.dm.saecg_wrapper['saecg_p'][int(self.slider_start.val * self.fs)] - 0.02,
                           self.dm.saecg_wrapper['saecg_p'][int(self.slider_start.val * self.fs)] + 0.02, color='red')
-        self.ax[1].vlines(self.slider_end.val, self.dm.saecg_wrapper['saecg_p'][int(self.slider_end.val * self.fs)] - 0.02,
+        self.ax[1].vlines(self.slider_end.val,
+                          self.dm.saecg_wrapper['saecg_p'][int(self.slider_end.val * self.fs)] - 0.02,
                           self.dm.saecg_wrapper['saecg_p'][int(self.slider_end.val * self.fs)] + 0.02, color='red')
 
         plt.axes(self.ax[4])
@@ -511,11 +535,14 @@ class UIManager:
         self.ax[1].clear()
         title_string = 'Signal Averaged P Wave'
         self.ax[1].set_title(title_string)
-        plt.plot(np.true_divide(range(len(self.saecg_p)), self.fs), self.saecg_p)
-        self.ax[1].vlines(self.slider_start.val, self.saecg_p[int(self.slider_start.val * self.fs)] - 0.02,
-                          self.saecg_p[int(self.slider_start.val * self.fs)] + 0.02, color='red')
-        self.ax[1].vlines(self.slider_end.val, self.saecg_p[int(self.slider_end.val * self.fs)] - 0.02,
-                          self.saecg_p[int(self.slider_end.val * self.fs)] + 0.02, color='red')
+        plt.plot(np.true_divide(range(len(self.dm.saecg_wrapper['saecg_p'])), self.fs),
+                 self.dm.saecg_wrapper['saecg_p'])
+        self.ax[1].vlines(self.slider_start.val,
+                          self.dm.saecg_wrapper['saecg_p'][int(self.slider_start.val * self.fs)] - 0.02,
+                          self.dm.saecg_wrapper['saecg_p'][int(self.slider_start.val * self.fs)] + 0.02, color='red')
+        self.ax[1].vlines(self.slider_end.val,
+                          self.dm.saecg_wrapper['saecg_p'][int(self.slider_end.val * self.fs)] - 0.02,
+                          self.dm.saecg_wrapper['saecg_p'][int(self.slider_end.val * self.fs)] + 0.02, color='red')
 
     def get_current_index(self):
         return self.current_index
