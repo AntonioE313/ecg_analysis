@@ -40,7 +40,7 @@ class dataManager:
         self.p_max_locs = np.array([[0] * len(self.beat_wrapper['beats'])])[
             0]  # Pre-allocate size beats[i] -> P_max_locs[i]
 
-        self.SAECG_P_WINDOW_SIZE = int(0.19921875 * self.fs)  # Need to work out this number for even integer window size
+        self.SAECG_P_WINDOW_SIZE = int(config.p_window_duration * self.fs)  # Need to work out this number for even integer window size
 
         saecg_p_windows = np.tile(np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE)),
                                   (len(self.beat_wrapper['beats']), 1))
