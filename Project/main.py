@@ -41,7 +41,7 @@ class dataManager:
             0]  # Pre-allocate size beats[i] -> P_max_locs[i]
 
         self.SAECG_P_WINDOW_SIZE = int(config.p_window_duration * self.fs)  # Need to work out this number for even integer window size
-
+        print('DM - self.SAECG_P_WINDOW_SIZE= ', self.SAECG_P_WINDOW_SIZE)
         saecg_p_windows = np.tile(np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE)),
                                   (len(self.beat_wrapper['beats']), 1))
 
@@ -56,6 +56,13 @@ class dataManager:
                              're': np.array([[0] * len(self.beat_wrapper['beats'])])[0],
                              'max_loc': np.array([[0] * len(self.beat_wrapper['beats'])])[0],
                              'max': np.array([[0.0] * len(self.beat_wrapper['beats'])])[0]}
+
+        # Dict holding parameters for TensorFlow2
+        self.model_parameters = {'PNN50': 0,
+                                 'PNN20': 0,
+                                 'Sex': 'x',
+                                 'BMI': 25,
+                                 'State': 'x'} # Stores patient state (healthy, AFib, AFlutter, etc)
 
         signal, waves = nk2.ecg_delineate(self.data_wrapper['raw_data'], self.heartpy_params['wd']['peaklist'],
                                           sampling_rate=3000, method="dwt", show=False,
@@ -115,7 +122,7 @@ class dataManager:
     # Need to make this function flexible not just for all beats, can take subset of beats
     def find_p_peaks(self, beats, p_window_center_s):
         # Prepare P windows array
-        p_windows = np.tile(np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE-1)), (len(beats), 1))
+        p_windows = np.tile(np.array(np.ones(shape=self.SAECG_P_WINDOW_SIZE)), (len(beats), 1))
         p_max_locs = np.array([[0] * len(beats)])[0]
         for i in range(len(beats)):
             # Generate the P windows
@@ -124,19 +131,21 @@ class dataManager:
             if beat_len == 0:
                 p_max_locs[i] = 0
                 continue
-
-            print('beat_len= ', beat_len)
-            print('config.p_window_center= ', config.p_window_center)
-            print('self.fs= ', self.fs)
+            # print('--------------------------------------------------------------------------------------')
+            # print('beat_len= ', beat_len)
+            # print('config.p_window_center= ', config.p_window_center*self.fs)
+            # print('self.p_window_size= ', self.SAECG_P_WINDOW_SIZE)
+            # print('self.fs= ', self.fs)
+            # print('--------------------------------------------------------------------------------------')
 
             # p window center in samples (use as index)
             self.beat_wrapper['p_window_center_s'][i] = beat_len - int(config.p_window_center * self.fs)
             t1 = math.ceil(self.beat_wrapper['p_window_center_s'][i] - 0.5 * self.SAECG_P_WINDOW_SIZE)
             t2 = t1 + self.SAECG_P_WINDOW_SIZE
-            debug_functions.array_inspect(p_windows, 'p_windows', False)
+            # debug_functions.array_inspect(p_windows, 'p_windows', False)
             # debug_functions.array_inspect(np.ndarray(beats), 'beats', False)
-            print('t1 t2, ', t1, t2)
-            print('p_window_center_s[i]', p_window_center_s[i])
+            # print('t1 t2, ', t1, t2)
+            # print('p_window_center_s[i]', p_window_center_s[i])
             p_windows[i] = beats[i][t1:t2]
             p_max_locs_temp = sp.signal.find_peaks(p_windows[i], distance=len(p_windows[i]))[0]
             if len(p_max_locs_temp) > 1:  # If there are equal maxima with same value, take first one
@@ -145,7 +154,7 @@ class dataManager:
             #   print('p_max_locs[i] = ', self.p_max_locs[i])
             p_max_locs[i] = p_max_locs[i] + self.beat_wrapper['p_window_center_s'][i] - round(
                 0.5 * self.SAECG_P_WINDOW_SIZE)
-            print('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
+           # print('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
 
         return {'self': self,
                 'p_windows': p_windows,
@@ -153,15 +162,15 @@ class dataManager:
 
     def compute_saecg(self):
         for i in range(len(self.p_max_locs)):
-            print()
             t1 = math.ceil(self.beat_wrapper['p_max_locs'][i] - 0.5 * self.SAECG_P_WINDOW_SIZE)
-            t2 = t1 + self.SAECG_P_WINDOW_SIZE-1
-            debug_functions.array_inspect(self.saecg_wrapper['p_windows'][i], 'self.saecg_wrapper[p_windows][i] ', False)
-            debug_functions.array_inspect(self.beat_wrapper['beats'][i][t1:t2], 'self.beat_wrapper[beats][i][t1:t2]', False)
-            self.saecg_wrapper['p_windows'][i] = self.beat_wrapper['beats'][i][t1:t2]
+            t2 = t1 + self.SAECG_P_WINDOW_SIZE
+            # debug_functions.array_inspect(self.saecg_wrapper['p_windows'][i], 'self.saecg_wrapper[p_windows][i] ', False)
+            # debug_functions.array_inspect(self.beat_wrapper['beats'][i][t1:t2], 'self.beat_wrapper[beats][i][t1:t2]', False)
+
+        self.saecg_wrapper['p_windows'][i] = self.beat_wrapper['beats'][i][t1:t2]
         self.saecg_wrapper['saecg_p'] = np.sum(self.saecg_wrapper['p_windows'], axis=0)
         self.saecg_wrapper['saecg_p'] = np.true_divide(self.saecg_wrapper['saecg_p'], len(self.beat_wrapper['beats']))
-        debug_functions.array_inspect(self.saecg_wrapper['saecg_p'], 'saecg_p', False)
+        # debug_functions.array_inspect(self.saecg_wrapper['saecg_p'], 'saecg_p', False)
         return self
 
     # Compute the xcorr of SAECG with the array of beats using le and re of P template (specified by user)
@@ -174,7 +183,7 @@ class dataManager:
                                                      self.beat_wrapper['beats'][i][1:])
 
             # Define P window edges as ratio of full beat length
-            xcorr_p_window_le = 0.5
+            xcorr_p_window_le = 0
             xcorr_p_window_re = 0.9
 
             xcorr = np.correlate(pc_change_saecg_local, pc_change_beats_i, mode='same')
@@ -182,7 +191,14 @@ class dataManager:
 
             # Set xcorr_params
             self.xcorr_params['max_loc'][i] = xcorr_p_window.tolist().index(np.amax(xcorr_p_window))
-
+            # print('---------------------------------------------------------------------------------------')
+            # plt.figure()
+            # plt.plot(xcorr_p_window)
+            # plt.show()
+            # temp = sp.signal.find_peaks(-xcorr_p_window[0:self.xcorr_params['max_loc'][i]], distance=self.fs)[0]
+            # print('DM - self.xcorr_params[max_loc][i]', self.xcorr_params['max_loc'][i])
+            # print('DM - peaks', temp)
+            # print('---------------------------------------------------------------------------------------')
             self.xcorr_params['le'][i] = sp.signal.find_peaks(-xcorr_p_window[0:self.xcorr_params['max_loc'][i]],
                                                               distance=self.fs)[0]
 
@@ -191,9 +207,9 @@ class dataManager:
 
             self.xcorr_params['max'][i] = xcorr[self.xcorr_params['max_loc'][i]]
 
-            print('DM - self.xcorr_params[max][i]=', self.xcorr_params['max'][i])
-            print('DM - self.xcorr_params[le][i]', self.xcorr_params['le'][i])
-            print('DM - self.xcorr_params[re][i]', self.xcorr_params['re'][i])
+            # print('DM - self.xcorr_params[max][i]=', self.xcorr_params['max'][i])
+            # print('DM - self.xcorr_params[le][i]', self.xcorr_params['le'][i])
+            # print('DM - self.xcorr_params[re][i]', self.xcorr_params['re'][i])
 
             # Debug plots
             # plt.figure()
@@ -204,12 +220,12 @@ class dataManager:
             # plt.show()
 
             p_window_le = round(0.5 * len(xcorr))  # loc of p window le in samples from start of beat
-            print('DM - p_window_le', p_window_le)
-            print('DM - 0.5*len(saecg_local)', 0.5 * len(saecg_local))
-            print('DM - self.p_window_center_s[i]', self.beat_wrapper['p_window_center_s'][i])
-            print('DM - p_window_max_loc=', self.xcorr_params['max_loc'][i])
-            print('len(xcorr)', len(xcorr))
-            print('len(self.beat_wrapper[beats][i])', len(self.beat_wrapper['beats'][i]))
+            # print('DM - p_window_le', p_window_le)
+            # print('DM - 0.5*len(saecg_local)', 0.5 * len(saecg_local))
+            # print('DM - self.p_window_center_s[i]', self.beat_wrapper['p_window_center_s'][i])
+            # print('DM - p_window_max_loc=', self.xcorr_params['max_loc'][i])
+            # print('len(xcorr)', len(xcorr))
+            # print('len(self.beat_wrapper[beats][i])', len(self.beat_wrapper['beats'][i]))
 
             # Set the loc params to be in terms of beat rather than p window
             self.xcorr_params['max_loc'][i] = self.xcorr_params['max_loc'][i] + p_window_le
@@ -271,10 +287,10 @@ class dataManager:
         for i in range(1, len(RRpc)):
             RRpc[i] = 100 * (self.beat_wrapper['RR_intervals'][i - 1] - self.beat_wrapper['RR_intervals'][i]) / \
                       self.beat_wrapper['RR_intervals'][i - 1]
-        plt.figure()
-        plt.title('Instantaneous % change in RR interval vs beat number')
-        plt.plot(RRpc)
-        plt.show()
+        # plt.figure()
+        # plt.title('Instantaneous % change in RR interval vs beat number')
+        # plt.plot(RRpc)
+        # plt.show()
         # Get interquartile range
         # iqr =
 
@@ -367,14 +383,12 @@ class UIManager:
         plt.scatter(np.true_divide(self.dm.heartpy_params['wd']['peaklist'], self.fs),
                     self.raw_data[self.dm.heartpy_params['wd']['peaklist']], c='g')
 
-        plt.scatter(np.true_divide(self.dm.neurokit_params['waves']['ECG_P_Peaks'], self.fs),
-                    self.raw_data[self.dm.neurokit_params['waves']['ECG_P_Peaks']], marker='x', c='r')
-
         plt.axes(self.ax[1])
-        title_string = 'Signal Averaged P Wave'
-        self.ax[1].set_title(title_string)
-        plt.plot(np.true_divide(range(len(self.dm.saecg_wrapper['saecg_p'])), self.fs),
-                 self.dm.saecg_wrapper['saecg_p'])
+        self.refresh_saecg_view(self.dm.saecg_wrapper['saecg_p'], 'Signal Averaged P Wave')
+        # title_string = 'Signal Averaged P Wave'
+        # self.ax[1].set_title(title_string)
+        # plt.plot(np.true_divide(range(len(self.dm.saecg_wrapper['saecg_p'])), self.fs),
+        #          self.dm.saecg_wrapper['saecg_p'])
 
         # Make the slider for left edge
         plt.axes(self.ax[2])
@@ -407,16 +421,6 @@ class UIManager:
                                 self.fs),
                  self.dm.beat_wrapper['beats'][self.current_index])
 
-        plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                 self.dm.beat_wrapper['beats'][self.get_current_index()][
-                     round(self.p_max_locs[self.get_current_index()])],
-                 marker='x')
-
-        plt.plot(self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs,
-                 self.dm.beat_wrapper['beats'][self.current_index][
-                     self.dm.xcorr_params['max_loc'][self.get_current_index()]],
-                 'o')
-
         mng = plt.get_current_fig_manager()
         mng.window.state("zoomed")
         plt.show()
@@ -426,7 +430,7 @@ class UIManager:
         plt.axes(self.ax[1])
         self.ax[1].set_title(title_string)
         plt.plot(np.true_divide(range(len(saecg)), self.fs), saecg)
-        plt.show()
+        plt.ylim([1.1*(min(saecg)), 1.1*max(saecg)])
 
     def refresh_beat_viewer(self):
         if self.get_current_index() >= 0:
@@ -440,16 +444,16 @@ class UIManager:
                                         self.fs),
                          self.dm.beat_wrapper['beats'][self.current_index])
 
-                plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
-                         self.dm.beat_wrapper['beats'][self.get_current_index()][
-                             round(self.p_max_locs[self.get_current_index()])],
-                         marker='x')
+                # plt.plot(self.p_max_locs[self.get_current_index()] / self.fs,
+                 #        self.dm.beat_wrapper['beats'][self.get_current_index()][
+                 #            round(self.p_max_locs[self.get_current_index()])],
+                 #        marker='x')
 
-                plt.plot(
-                    self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs,
-                    self.dm.beat_wrapper['beats'][self.current_index][
-                        self.dm.xcorr_params['max_loc'][self.get_current_index()]],
-                    'o')
+                #plt.plot(
+                #    self.dm.xcorr_params['max_loc'][self.get_current_index()] / self.fs,
+                #    self.dm.beat_wrapper['beats'][self.current_index][
+                #        self.dm.xcorr_params['max_loc'][self.get_current_index()]],
+                #    'o')
 
             elif self.mode == 2:
                 # Create the array which is the 3 beats index-1 through index + 1
@@ -458,25 +462,19 @@ class UIManager:
                                          self.dm.beat_wrapper['beats'][self.current_index + 1])
                 plt.plot(np.true_divide(range(len(display_data)), self.fs), display_data)
 
-                plt.plot((len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
-                    self.get_current_index()]) / self.fs,
-                         display_data[(len(self.dm.beat_wrapper['beats'][self.current_index - 1]) +
-                                       self.dm.xcorr_params['max_loc'][self.get_current_index()])],
-                         marker='o')
+                # plt.plot((len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.xcorr_params['max_loc'][
+                #   self.get_current_index()]) / self.fs,
+                #         display_data[(len(self.dm.beat_wrapper['beats'][self.current_index - 1]) +
+                #                       self.dm.xcorr_params['max_loc'][self.get_current_index()])],
+                #         marker='o')
 
-                plt.plot(
-                    (len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
-                        self.current_index]) / self.fs,
-                    display_data[
-                        len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
-                            self.current_index]],
-                    marker='x')
-
-                plt.plot((len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.xcorr_params['re'][
-                    self.current_index]) / self.fs,
-                         self.dm.beat_wrapper['beats'][self.current_index][
-                             self.dm.xcorr_params['re'][self.current_index]],
-                         marker='*')
+                # plt.plot(
+                #    (len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
+                #        self.current_index]) / self.fs,
+                #    display_data[
+                #        len(self.dm.beat_wrapper['beats'][self.current_index - 1]) + self.dm.beat_wrapper['p_max_locs'][
+                #            self.current_index]],
+                #    marker='x')
 
             plt.show()
 
@@ -526,9 +524,9 @@ class UIManager:
         self.refresh_beat_viewer()
 
     def premature_button_pushed(self, x):
-        print('UI - premature')
-        standard_beats = self.dm.premature_analysis(x)
-        self.refresh_saecg_view(standard_beats, 'SAECG of standard P-waves')
+        print('UI - identify premature heartbeats - work in progress')
+        # standard_beats = self.dm.premature_analysis(x)
+        # self.refresh_saecg_view(standard_beats, 'SAECG of standard P-waves')
 
     def slider_updated(self, event):
         plt.axes(self.ax[1])
